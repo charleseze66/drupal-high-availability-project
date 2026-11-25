@@ -1,0 +1,24 @@
+# Terraform
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/*.tfplan
+**/terraform.tfvars
+**/crash.log
+
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+.aws/
+*.pem
+*.key
+*.secret
+
+# Ansible
+inventory.ini
+*.retry
+
+# Operating system
+Thumbs.db
+.DS_Store

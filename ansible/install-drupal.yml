@@ -1,0 +1,38 @@
+
+---
+- name: Install Drupal into RDS
+  hosts: drupal_app
+  become: true
+  gather_facts: false
+  serial: 1
+
+  vars_prompt:
+    - name: db_password
+      prompt: "Enter your RDS database password"
+      private: true
+
+    - name: drupal_password
+      prompt: "Choose your Drupal administrator password"
+      private: true
+
+  vars:
+    db_host: drupal-ha-database.cf4s6oy8y9b7.eu-north-1.rds.amazonaws.com
+
+  tasks:
+    - name: Install Drupal site on first application server
+      no_log: true
+      ansible.builtin.command:
+        argv:
+          - /var/www/drupal/vendor/bin/drush
+          - site:install
+          - standard
+          - "--db-url=mysql://drupaladmin:{{ db_password | urlencode }}@{{ db_host }}:3306/drupaldb"
+          - "--site-name=Drupal High Availability"
+          - "--account-name=admin"
+          - "--account-pass={{ drupal_password }}"
+          - --yes
+        chdir: /var/www/drupal
+      when: inventory_hostname == 'i-069944ff131af1171'
+      environment:
+        COMPOSER_ALLOW_SUPERUSER: "1"
+

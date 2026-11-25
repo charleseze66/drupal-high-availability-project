@@ -1,0 +1,120 @@
+---
+- name: Install Drupal application requirements
+  hosts: drupal_app
+  become: true
+  gather_facts: false
+  serial: 1
+
+  tasks:
+    - name: Update Ubuntu package cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install Apache, PHP and required packages
+      ansible.builtin.apt:
+        name:
+          - apache2
+          - composer
+          - curl
+          - git
+          - unzip
+          - php
+          - libapache2-mod-php
+          - php-cli
+          - php-mysql
+          - php-xml
+          - php-gd
+          - php-curl
+          - php-mbstring
+          - php-zip
+          - php-intl
+          - php-apcu
+          - php-bcmath
+          - php-opcache
+        state: present
+
+    - name: Create Drupal project using Composer
+      ansible.builtin.command:
+        cmd: composer create-project drupal/recommended-project:^11 /var/www/drupal --no-interaction
+        creates: /var/www/drupal/web/index.php
+      environment:
+        COMPOSER_ALLOW_SUPERUSER: "1"
+
+    - name: Install Drush
+      ansible.builtin.command:
+        cmd: composer require drush/drush --no-interaction
+        chdir: /var/www/drupal
+        creates: /var/www/drupal/vendor/bin/drush
+      environment:
+        COMPOSER_ALLOW_SUPERUSER: "1"
+
+    - name: Enable Apache rewrite module
+      ansible.builtin.command: a2enmod rewrite
+      register: rewrite_result
+      changed_when: "'Enabling' in rewrite_result.stdout"
+
+    - name: Configure Apache for Drupal
+      ansible.builtin.copy:
+        dest: /etc/apache2/sites-available/drupal.conf
+        mode: "0644"
+        content: |
+          <VirtualHost *:80>
+              ServerName localhost
+              DocumentRoot /var/www/drupal/web
+
+              <Directory /var/www/drupal/web>
+                  AllowOverride All
+                  Require all granted
+                  Options FollowSymLinks
+              </Directory>
+
+              DirectoryIndex index.php index.html
+
+              ErrorLog ${APACHE_LOG_DIR}/drupal-error.log
+              CustomLog ${APACHE_LOG_DIR}/drupal-access.log combined
+          </VirtualHost>
+
+    - name: Disable Apache default website
+      ansible.builtin.command: a2dissite 000-default.conf
+      register: default_site
+      changed_when: "'disabled' in default_site.stdout"
+
+    - name: Enable Drupal Apache website
+      ansible.builtin.command: a2ensite drupal.conf
+      register: drupal_site
+      changed_when: "'Enabling' in drupal_site.stdout"
+
+    - name: Create Drupal files directory
+      ansible.builtin.file:
+        path: /var/www/drupal/web/sites/default/files
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: "0755"
+
+    - name: Set Drupal application directory permissions
+      ansible.builtin.file:
+        path: /var/www/drupal
+        owner: root
+        group: www-data
+        mode: "0755"
+        recurse: true
+
+    - name: Ensure Drupal files directory is writable
+      ansible.builtin.file:
+        path: /var/www/drupal/web/sites/default/files
+        owner: www-data
+        group: www-data
+        mode: "0755"
+        recurse: true
+
+    - name: Check Apache configuration
+      ansible.builtin.command: apachectl configtest
+      changed_when: false
+
+    - name: Start and enable Apache
+      ansible.builtin.systemd:
+        name: apache2
+        state: restarted
+        enabled: true
